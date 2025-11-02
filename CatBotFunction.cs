@@ -1,4 +1,3 @@
-using System;
 using Microsoft.Azure.Functions.Worker;
 using Microsoft.Extensions.Logging;
 
@@ -14,13 +13,24 @@ public class CatBotFunction
     }
 
     [Function("CatBotFunction")]
-    public void Run([TimerTrigger("*/10 * * * * *")] TimerInfo myTimer)
+    public async Task Run([TimerTrigger("*/10 * * * * *")] TimerInfo myTimer)
     {
-        _logger.LogInformation("C# Timer trigger function executed at: {executionTime}", DateTime.Now);
-        
-        if (myTimer.ScheduleStatus is not null)
+        var PAT = Environment.GetEnvironmentVariable("META_PAT");
+        var recipientID = Environment.GetEnvironmentVariable("RECIPIENT_ID");
+
+        if (string.IsNullOrEmpty(PAT))
         {
-            _logger.LogInformation("Next timer schedule at: {nextSchedule}", myTimer.ScheduleStatus.Next);
+            _logger.LogError("META_PAT environment variable is not set");
+            return;
         }
+
+        if (string.IsNullOrEmpty(recipientID))
+        {
+            _logger.LogError("RECIPIENT_ID environment variable is not set");
+            return;
+        }
+
+        ICatImageSender catImageSender = new CatImageSender();
+        await catImageSender.SendCatImage(PAT, recipientID);
     }
 }
