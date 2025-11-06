@@ -10,6 +10,7 @@ builder.ConfigureFunctionsWebApplication();
 builder.Services
     .AddApplicationInsightsTelemetryWorkerService()
     .ConfigureFunctionsApplicationInsights()
+    .AddSingleton<IRateLimiterService, RateLimiterService>()
     .AddCors(options =>
         {
             options.AddDefaultPolicy(builder =>

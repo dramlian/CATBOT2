@@ -11,10 +11,12 @@ namespace CATBOT.Function;
 public class CatBotFunction
 {
     private readonly ILogger _logger;
+    private readonly IRateLimiterService _rateLimiter;
 
-    public CatBotFunction(ILoggerFactory loggerFactory)
+    public CatBotFunction(ILoggerFactory loggerFactory, IRateLimiterService rateLimiter)
     {
         _logger = loggerFactory.CreateLogger<CatBotFunction>();
+        _rateLimiter = rateLimiter;
     }
 
     [Function("CatBotFunction")]
@@ -39,6 +41,14 @@ public class CatBotFunction
                 .GetProperty("sender")
                 .GetProperty("id")
                 .GetString() ?? throw new Exception("No sender ID was found!");
+
+            if (!_rateLimiter.IsAllowed(senderId))
+            {
+                _logger.LogWarning($"Rate limit exceeded for user {senderId}");
+                var rateLimited = req.CreateResponse(HttpStatusCode.TooManyRequests);
+                await rateLimited.WriteStringAsync("Rate limit exceeded. Please try again later.");
+                return rateLimited;
+            }
 
             var PAT = Environment.GetEnvironmentVariable("META_PAT");
 
