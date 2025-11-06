@@ -2,6 +2,7 @@ using Microsoft.Azure.Functions.Worker;
 using Microsoft.Azure.Functions.Worker.Http;
 using Microsoft.Extensions.Logging;
 using System.Net;
+using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
 
@@ -19,36 +20,26 @@ public class CatBotFunction
     [Function("CatBotFunction")]
     public async Task<HttpResponseData> Run([HttpTrigger(AuthorizationLevel.Anonymous, "get", "post")] HttpRequestData req)
     {
-        var query = System.Web.HttpUtility.ParseQueryString(req.Url.Query);
-
-        if (req.Method == "GET")
+        if (req.Method == "POST")
         {
-            var mode = query["hub.mode"];
-            var token = query["hub.verify_token"];
-            var challenge = query["hub.challenge"];
+            string body = await new StreamReader(req.Body).ReadToEndAsync();
+            _logger.LogInformation($"Received POST payload: {body}");
 
-            if (mode == "subscribe" && token == Environment.GetEnvironmentVariable("VERIFY_TOKEN") && !String.IsNullOrEmpty(challenge))
+            if (!IsMetaRequestValid(body, req))
             {
-                var response = req.CreateResponse(HttpStatusCode.OK);
-                await response.WriteStringAsync(challenge, Encoding.UTF8);
-                return response;
+                _logger.LogWarning("Invalid Meta signature");
+                var forbidden = req.CreateResponse(HttpStatusCode.Forbidden);
+                await forbidden.WriteStringAsync("Invalid signature");
+                return forbidden;
             }
 
-            return req.CreateResponse(HttpStatusCode.Forbidden);
-        }
-        else if (req.Method == "POST")
-        {
-            string requestBody = await new StreamReader(req.Body).ReadToEndAsync();
-            _logger.LogInformation($"Received POST payload: {requestBody}");
-
-            var senderId = JsonDocument.Parse(requestBody).RootElement
+            var senderId = JsonDocument.Parse(body).RootElement
                 .GetProperty("entry")[0]
                 .GetProperty("messaging")[0]
                 .GetProperty("sender")
                 .GetProperty("id")
                 .GetString() ?? throw new Exception("No sender ID was found!");
 
-            _logger.LogInformation($"Sender ID: {senderId}");
             var PAT = Environment.GetEnvironmentVariable("META_PAT");
 
             if (string.IsNullOrEmpty(PAT))
@@ -72,4 +63,25 @@ public class CatBotFunction
             return responsee;
         }
     }
+
+    private bool IsMetaRequestValid(string body, HttpRequestData req)
+    {
+        req.Headers.TryGetValues("X-Hub-Signature-256", out var sigValues);
+        var signature = sigValues?.FirstOrDefault();
+
+        var secret = Environment.GetEnvironmentVariable("META_APP_SECRET");
+        if (string.IsNullOrEmpty(signature) || !signature.StartsWith("sha256="))
+            return false;
+
+        var provided = signature.Substring("sha256=".Length);
+        if (string.IsNullOrEmpty(secret))
+            return false;
+
+        using var hmac = new HMACSHA256(Encoding.UTF8.GetBytes(secret));
+        var hash = hmac.ComputeHash(Encoding.UTF8.GetBytes(body));
+        var computed = BitConverter.ToString(hash).Replace("-", "").ToLower();
+
+        return computed == provided.ToLower();
+    }
+
 }
