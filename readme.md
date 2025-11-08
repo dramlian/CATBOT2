@@ -1,4 +1,4 @@
-# Cat Photo Bot - Azure HTTP Function with Meta Webhook
+# CATBOT Azure HTTP Function with Meta Webhook
 
 This Azure Function project implements a Facebook Messenger bot that automatically sends cute cat photos to users who message your Facebook page. The bot uses Azure HTTP-triggered functions to handle Meta webhooks and respond with adorable cat images.
 
