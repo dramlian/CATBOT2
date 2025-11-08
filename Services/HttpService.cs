@@ -1,6 +1,5 @@
 using System.Text;
 using System.Text.Json;
-using System.Net.Http.Headers;
 
 public class HttpService : IHttpService
 {
